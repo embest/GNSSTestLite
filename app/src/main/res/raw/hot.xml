@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test>
+    <round>50</round>
+    <cep>37.55,126.983333</cep>
+    <request>1</request>
+    <timeout>180</timeout>
+    <delete>0</delete>
+</test>

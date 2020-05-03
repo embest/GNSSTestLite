@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test>
+    <round>1</round>
+    <request>86400</request>
+    <timeout>0</timeout>
+    <delete>0</delete>
+</test>
