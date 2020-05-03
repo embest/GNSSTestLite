@@ -299,37 +299,43 @@ class FullscreenActivity : AppCompatActivity() , AdapterView.OnItemSelectedListe
 
     private fun registerGnssStatusCallback(){
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                if (mGnssStatusCallBack == null) {
-                    object : GnssStatus.Callback() {
-                        override fun onSatelliteStatusChanged(status: GnssStatus) {
-                            mGnssInfo.cleanSatellites()
+            if (mGpsStatusListener == null) {
+                mGpsStatusListener = GpsStatus.Listener { event ->
+                    val status = mService!!.getGpsStatus(null)
+                    when (event) {
+                        GpsStatus.GPS_EVENT_FIRST_FIX -> {
+                            if (!mFirstFixed) {
+                                mGnssInfo.ttff = status.timeToFirstFix / 1000f
+                                mFirstFixed = true
+                                Log.e(TAG, "TTFF(KK):${mGnssInfo.ttff}")
+                                if (mTestJob.request > 1) {
+                                    addRequestTimer(mTestJob.request)
+                                } else {
+                                    onOneTestDone(true)
+                                }
+                            }
+                            Log.e(TAG, "Android KK Fixed, No need NMEA check.")
+                            removeCheckAndroidFixTimer()
+                        }
+                        GpsStatus.GPS_EVENT_SATELLITE_STATUS -> {
                             var use = 0
                             var view = 0
-                            for (i in 0 until status.satelliteCount) {
-                                if (status.getCn0DbHz(i) > 0) {
-                                    val satellite = GnssSatellite()
-                                    satellite.azimuths = status.getAzimuthDegrees(i)
-                                    satellite.cn0 = status.getCn0DbHz(i)
-                                    satellite.constellation = status.getConstellationType(i)
-                                    satellite.svid = status.getSvid(i)
-                                    satellite.inUse = status.usedInFix(i)
-                                    satellite.elevations = status.getElevationDegrees(i)
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                        satellite.frequency = status.getCarrierFrequencyHz(i)
-                                        Log.e(
-                                            TAG,
-                                            "SAT:${satellite.svid} Type:${satellite.constellation} CF:${satellite.frequency}"
-                                        )
-                                    }
-                                    mGnssInfo.addSatellite(satellite)
+
+                            val itrator = status.satellites.iterator()
+
+                            while (itrator.hasNext() && view <= status.maxSatellites) {
+                                val sat = itrator.next()
+                                if (sat.snr > 0) {
                                     view++
-                                    if (status.usedInFix(i)) {
+                                    val satellite = GnssSatellite()
+                                    satellite.cn0 = sat.snr
+                                    satellite.inUse = sat.usedInFix()
+                                    mGnssInfo.addSatellite(satellite)
+                                    if (sat.usedInFix()) {
                                         use++
                                     }
                                 }
                             }
-
                             var cn0 = 0.0f
                             var count = 4
                             if (count > mGnssInfo.satellites.size) {
@@ -344,94 +350,15 @@ class FullscreenActivity : AppCompatActivity() , AdapterView.OnItemSelectedListe
                             mGnssInfo.top4 = cn0 / count
                             mGnssInfo.inuse = use
                             mGnssInfo.inview = view
-
                             onUpdateView()
                         }
-
-                        override fun onFirstFix(ttffMillis: Int) {
-                            if (!mFirstFixed) {
-                                mGnssInfo.ttff = ttffMillis / 1000f
-                                mFirstFixed = true
-                                Log.e(TAG, "TTFF:$ttffMillis")
-                                if (mTestJob.request > 1) {
-                                    addRequestTimer(mTestJob.request)
-                                } else {
-                                    onOneTestDone(true)
-                                }
-                            }
-                            Log.e(TAG, "Android Fixed, No need NMEA check.")
-                            removeCheckAndroidFixTimer()
-                        }
-                    }
-                    if (ActivityCompat.checkSelfPermission(
-                            this,
-                            Manifest.permission.ACCESS_FINE_LOCATION
-                        ) == PackageManager.PERMISSION_GRANTED
-                    ) {
-                        mService!!.registerGnssStatusCallback(mGnssStatusCallBack)
-                    }
-                }
-            } else {
-                if (mGpsStatusListener == null) {
-                    mGpsStatusListener = GpsStatus.Listener { event ->
-                        val status = mService!!.getGpsStatus(null)
-                        when (event) {
-                            GpsStatus.GPS_EVENT_FIRST_FIX -> {
-                                if (!mFirstFixed) {
-                                    mGnssInfo.ttff = status.timeToFirstFix / 1000f
-                                    mFirstFixed = true
-                                    Log.e(TAG, "TTFF(KK):${mGnssInfo.ttff}")
-                                    if (mTestJob.request > 1) {
-                                        addRequestTimer(mTestJob.request)
-                                    } else {
-                                        onOneTestDone(true)
-                                    }
-                                }
-                                Log.e(TAG, "Android KK Fixed, No need NMEA check.")
-                                removeCheckAndroidFixTimer()
-                            }
-                            GpsStatus.GPS_EVENT_SATELLITE_STATUS -> {
-                                var use = 0
-                                var view = 0
-
-                                val itrator = status.satellites.iterator()
-
-                                while (itrator.hasNext() && view <= status.maxSatellites) {
-                                    val sat = itrator.next()
-                                    if (sat.snr > 0) {
-                                        view++
-                                        val satellite = GnssSatellite()
-                                        satellite.cn0 = sat.snr
-                                        satellite.inUse = sat.usedInFix()
-                                        mGnssInfo.addSatellite(satellite)
-                                        if (sat.usedInFix()) {
-                                            use++
-                                        }
-                                    }
-                                }
-                                var cn0 = 0.0f
-                                var count = 4
-                                if (count > mGnssInfo.satellites.size) {
-                                    count = mGnssInfo.satellites.size
-                                }
-
-                                for (i in 0 until count) {
-                                    cn0 += mGnssInfo.satellites[i].cn0
-                                    Log.e(TAG, "CN0AVG:+${mGnssInfo.satellites[i].cn0}")
-                                }
-
-                                mGnssInfo.top4 = cn0 / count
-                                mGnssInfo.inuse = use
-                                mGnssInfo.inview = view
-                                onUpdateView()
-                            }
-                            else -> {
-                            }
+                        else -> {
                         }
                     }
                 }
-                mService!!.addGpsStatusListener(mGpsStatusListener)
             }
+            mService!!.addGpsStatusListener(mGpsStatusListener)
+
         }
     }
 
